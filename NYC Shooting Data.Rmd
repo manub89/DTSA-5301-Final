@@ -1,0 +1,115 @@
+---
+title: "DTSA 5301 Week 3"
+author: "Manu Balasubramanian"
+output: pdf_document
+date: "2025-04-26"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Step 1: Import Necessary Libraries and Dataset
+
+```{r}
+library(lubridate)
+library(dplyr)
+library(ggplot2)
+shoot <- read.csv("https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv?accessType=DOWNLOAD")
+```
+
+### Summary of the Data
+This data set contains shooting incident data from New York between 2006 and 2024. This data set contains a total of 29,744 rows and 21 column. Some of the columns of interest in this data set include the race, gender, and age group of both the victim and the perpetrator. There are also columns identifying whether a specific incident was fatal and if there were any murders resulting from the incident. 
+
+Data Source: https://catalog.data.gov/dataset/nypd-shooting-incident-data-historic
+
+### Questions to be Answered
+After glacning through the data set provided, the main question I would like to answer is whether race, gender, and age play a role in shooting crimes. I also want to look into whether these columns affect whether an incident leads to a murder.
+
+## Tidy and Transform Data
+```{r}
+shoot <- shoot %>%
+  mutate(OCCUR_DATE = mdy(OCCUR_DATE),
+         PERP_SEX = ifelse(PERP_SEX == "", "Unknown", PERP_SEX),
+         PERP_AGE_GROUP = ifelse(PERP_AGE_GROUP == "", "Unknown", PERP_AGE_GROUP),
+         PERP_RACE = ifelse(PERP_RACE == "", "Unknown", PERP_RACE)) %>%
+  filter(!PERP_SEX %in% c("UNKNOWN", "Unknown", "(null)"), 
+         !PERP_AGE_GROUP %in% c("Unknown", "UNKNOWN", "(null)"),
+         !PERP_RACE %in% c("Unknown", "UNKNOWN", "(null)")) %>%
+  select(-c(X_COORD_CD, Y_COORD_CD, Latitude, Longitude, Lon_Lat, LOCATION_DESC, LOC_CLASSFCTN_DESC, LOC_OF_OCCUR_DESC))
+
+shoot_short <- head(shoot, 10)
+shoot_short
+```
+
+In order to clean the above table, the occur_date column name was formatted as a date function instead of a chr to make the data more accurate. All the longitude and latitude columns at the end of the data set are unecessary for any future analysis so those columns have been omitted form the shoot dataframe. The first 10 rows of the summarized dataframe is displayed above.
+
+## Analyze and Visualize Data
+```{r}
+shootClean <- shoot %>%
+  mutate_all(factor)
+summary(shootClean)
+```
+
+By looking at the data, we can see that some of the columns have empty values for a significant amount of rows such as the location of occurrance description. As there are a few description columns, these will not be important to my analysis and will not be a problem. The perp age column however would be an important column and has quite a few missing values. This will ba handled by filling any empty values with the "Unknown" value so each row has something to be filled in. This is also the case with the perp gender column as well as the gender race columns. Now that all the empty values have been replaced with unknown, I went ahead and filtered out all of these values as well as (null) and "UNKNOWN" values to ensure that dataframe only has good data. In addition to replacing all empty values with a filler value, I also factored all the columns so the summary statistics show the character values and their totals.
+
+## Visualize Data
+```{r}
+  ggplot(shoot, aes(x = PERP_AGE_GROUP)) + 
+  geom_bar() + 
+  facet_wrap(~ PERP_RACE) + 
+  theme(axis.text.x=element_text(size=4.5)) + 
+  labs(title = "Perp Race Related to Victim Age Group")
+```
+
+This visualization compares the age group of the perpetrator to their race. The intended analysis of this was to get an idea of what age group of individuals commit more crimes based on race. This can help mitigate individuals from becoming shooters later in their life. For example, 18-24 year olds have the most cases of shooting against them with Black individuals having over 4000 18-24 year olds committing shooting crimes in New York.
+
+```{r}
+  shoot_sum <- shoot %>%
+    group_by(BORO)
+  shoot_sum <- shoot_sum %>%
+    summarize(count = n(), avg_date = mean(OCCUR_DATE))
+  shoot_sum
+```
+
+The shoot_sum dataframe contains the shoot dataframe summarized to include the number of incidents per borough. It also includes the average date of incidents in New York.
+
+```{r}
+  ggplot(shoot_sum, aes(x = avg_date, y = count, color = BORO)) + 
+  geom_point(aes(size = 5)) +
+  labs(
+    title = "Average Date of Incident based on Number of Incidents in a Borough")
+```
+
+This plot shows the average date of incident on the x axis, the number of incidents in each borough on the y axis and has each borough colored in a different color. Using this graph, we can see which borough has the most shooting incidents and on average which dates those shootings happen. For example, Queens has a little under 2500 shooting incidents with an average dat of January 2015, so we can conclude that there are a similar amount of shooting cases on either side of the date range in the dataframe. Another exampke would be Manhattan which has an average date of January 2016 so we can conclude a majority of the Manhattan shootings are closer to the reporting of this data set.
+
+## Create a Data Model
+```{r}
+  model <- lm(PRECINCT ~ PERP_RACE + STATISTICAL_MURDER_FLAG, data = shoot)
+  summary(model)
+```
+
+I decided to create a model using the precinct column modeled with both the perpetrator race and the murder flag. This will identify which race is associated to more murders and exactly which precinct these murders are taking place. Based on the summary statistics of the model, it can be concluded that this model is an accurate prediction of the data as the p value is very small.
+
+## Extra Analysis
+
+```{r}
+  ggplot(shoot, aes(x = PERP_SEX)) + 
+  geom_bar() + 
+  facet_wrap(~ PERP_RACE) + 
+  theme(axis.text.x=element_text(size=4.5)) + 
+  labs(title = "Victim Sex Grouped by Perp Race")
+```
+As we can see in this chart, more victims are male for every single perp race which is a very interesting statistic. We can conclude here that regardless of perp race, the target of most shooting incidents is towards a male. This disparity is especially true for black shooters as there is a difference of almost 10,000 between female victims and male victims.
+
+## Step 4: Bias Analysis and Conclusions
+After taking a look at the various columns for race and sex, there is bound to be some bias when analyzing the visuals and results. One point of bias can be looking at the first bar chart and concluding the black people are more at risk to become shooters in New York when they get to the age of 18. This is an example of racial bias as this data is primarily offenses committed by black people. A way to mitigate this bias is to include crime data for more than shooting incidents to see if the results that come back are the same.
+
+Another place of bias is the gender bias that exists within this data. It can be seen clearly in the extra analysis graph which displays that men are more susceptible to becoming victims of a shooting. This bias could lead to people believing as a woman, that you will not be involved in a shooting and although women are at a much lower risk, they should still be vigilant.
+
+After completing all analysis, it can be concluded that the answer to the initial question posed is yes, race, gender, and age all pose a clear factor in shooting crimes. The analysis shows that younger, black males are more likely to commit a shooting crime in New York more than any other combination of age, race, and gender. Along with this, the model supports race being a factor in whether a shooting incident leads to murders as the p-value is a very small number.
+
+
+```{r}
+sessionInfo()
+```
